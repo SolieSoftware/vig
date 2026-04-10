@@ -1,3 +1,7 @@
+import sys
+import termios
+import tty
+
 from rich.console import Console
 
 from vig.agents.odds_agent import OddsAPIUnavailable, get_opportunities
@@ -11,39 +15,67 @@ console = Console()
 sport = FootballAdapter()
 tipster = TipsterAgent(sport)
 
-# --- Data collection ---
 
-try:
-    bets = get_opportunities(sport)
-except OddsAPIUnavailable as e:
-    console.print(f"[bold red]Odds API unavailable:[/bold red] {e}")
-    raise SystemExit(1)
+def _getkey() -> str:
+    """Read a single keypress from stdin without requiring Enter."""
+    fd = sys.stdin.fileno()
+    old = termios.tcgetattr(fd)
+    try:
+        tty.setraw(fd)
+        return sys.stdin.read(1)
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old)
 
-general_intel = tipster.general()
 
-match_intel = []
-if bets:
-    parts = bets[0].match.split(" v ", 1)
-    if len(parts) == 2:
-        match_intel = tipster.match(parts[0].strip(), parts[1].strip())
+def _run() -> None:
+    """Fetch all data, synthesize, and render one full dashboard update."""
+    try:
+        bets = get_opportunities(sport)
+    except OddsAPIUnavailable as e:
+        console.print(f"[bold red]Odds API unavailable:[/bold red] {e}")
+        return
 
-community_tips = []
-try:
-    community_tips = get_oddschecker_tips()
-except OddscheckerUnavailable as e:
-    console.print(f"[dim]Community tips unavailable: {e}[/dim]")
+    general_intel = tipster.general()
 
-# --- Synthesis ---
+    match_intel = []
+    if bets:
+        parts = bets[0].match.split(" v ", 1)
+        if len(parts) == 2:
+            match_intel = tipster.match(parts[0].strip(), parts[1].strip())
 
-synthesized = synthesize(bets, community_tips)
+    community_tips = []
+    try:
+        community_tips = get_oddschecker_tips()
+    except OddscheckerUnavailable:
+        pass
 
-# --- Render ---
+    synthesized = synthesize(bets, community_tips)
 
-render(
-    sport=sport,
-    synthesized=synthesized,
-    general_intel=general_intel,
-    match_intel=match_intel,
-    community_tips=community_tips,
-    top_match=bets[0].match if bets else None,
-)
+    render(
+        sport=sport,
+        synthesized=synthesized,
+        general_intel=general_intel,
+        match_intel=match_intel,
+        community_tips=community_tips,
+        top_match=bets[0].match if bets else None,
+    )
+
+
+def main() -> None:
+    _run()
+    while True:
+        console.print("[dim]  r = refresh   q = quit[/dim]")
+        try:
+            key = _getkey()
+        except (KeyboardInterrupt, EOFError):
+            break
+
+        if key in ("q", "Q", "\x03"):  # q, Q, or Ctrl+C
+            break
+        if key in ("r", "R"):
+            console.clear()
+            _run()
+
+
+if __name__ == "__main__":
+    main()
