@@ -65,6 +65,7 @@ def render(
     bets: List[BetOpportunity],
     intel: List[IntelItem] = None,
     match_intel: List[IntelItem] = None,
+    oddschecker_intel: List[IntelItem] = None,
     top_match: str = None,
 ) -> None:
     now_str = datetime.now(tz=timezone.utc).strftime("%H:%M UTC")
@@ -106,4 +107,12 @@ def render(
             console.print(
                 f"  [dim]{item.source}[/dim]  {item.text[:90]}{'…' if len(item.text) > 90 else ''}"
             )
+
+    # Oddschecker pane
+    if oddschecker_intel:
+        console.print()
+        console.rule("[dim]INTEL — Community picks, AI-extracted (context only, not signal)[/dim]", style="dim")
+        for item in oddschecker_intel:
+            console.print(f"  [dim]{item.source}[/dim]  {item.text[:90]}{'…' if len(item.text) > 90 else ''}")
+
     console.print()
