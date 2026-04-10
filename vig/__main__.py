@@ -13,7 +13,16 @@ except OddsAPIUnavailable as e:
     Console().print(f"[bold red]Odds API unavailable:[/bold red] {e}")
     raise SystemExit(1)
 
-# Intel is best-effort — never blocks the main output
-intel = tipster.general()
+# General intel from tip subreddits
+general_intel = tipster.general()
 
-render(sport, bets, intel)
+# Match-specific intel for the top-ranked fixture
+match_intel = []
+if bets:
+    top = bets[0]
+    # Parse "Home v Away" back into team names
+    parts = top.match.split(" v ", 1)
+    if len(parts) == 2:
+        match_intel = tipster.match(parts[0].strip(), parts[1].strip())
+
+render(sport, bets, general_intel, match_intel, top_match=bets[0].match if bets else None)

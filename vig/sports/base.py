@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import List
+from typing import Dict, List
 
 
 class SportAdapter(ABC):
@@ -24,3 +24,8 @@ class SportAdapter(ABC):
     @abstractmethod
     def default_subreddits(self) -> List[str]:
         """Subreddits for general tip scraping."""
+
+    @property
+    @abstractmethod
+    def team_subreddits(self) -> Dict[str, str]:
+        """Maps team name → subreddit name for match-specific intel."""

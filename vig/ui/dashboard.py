@@ -60,7 +60,13 @@ def _bet_card(bet: BetOpportunity) -> Panel:
     return Panel(table, border_style=border_style, padding=(0, 1))
 
 
-def render(sport: SportAdapter, bets: List[BetOpportunity], intel: List[IntelItem] = None) -> None:
+def render(
+    sport: SportAdapter,
+    bets: List[BetOpportunity],
+    intel: List[IntelItem] = None,
+    match_intel: List[IntelItem] = None,
+    top_match: str = None,
+) -> None:
     now_str = datetime.now(tz=timezone.utc).strftime("%H:%M UTC")
 
     console.print()
@@ -80,17 +86,24 @@ def render(sport: SportAdapter, bets: List[BetOpportunity], intel: List[IntelIte
         row = cards[i:i + 2]
         console.print(Columns(row, equal=True, expand=True))
 
-    # Intel pane
+    # Match-specific intel pane
+    if match_intel:
+        label = f"INTEL — {top_match}" if top_match else "INTEL — top fixture"
+        console.print()
+        console.rule(f"[dim]{label} (context only, not signal)[/dim]", style="dim")
+        for item in match_intel[:6]:
+            console.print(
+                f"  [dim]{item.source}[/dim]  {item.text[:90]}{'…' if len(item.text) > 90 else ''}"
+            )
+
+    # General intel pane
     console.print()
-    console.rule("[dim]INTEL — context only, not signal[/dim]", style="dim")
+    console.rule("[dim]INTEL — general tips (context only, not signal)[/dim]", style="dim")
     if not intel:
         console.print("[dim]  No Reddit context loaded.[/dim]")
     else:
-        for item in intel[:8]:  # cap at 8 items
-            age_min = int((time.time() - item.scraped_at) / 60)
-            age_str = f"{age_min}m ago" if age_min > 0 else "just now"
+        for item in intel[:6]:
             console.print(
-                f"  [dim]{item.source}[/dim]  {item.text[:90]}{'…' if len(item.text) > 90 else ''}  "
-                f"[dim]{age_str}[/dim]"
+                f"  [dim]{item.source}[/dim]  {item.text[:90]}{'…' if len(item.text) > 90 else ''}"
             )
     console.print()

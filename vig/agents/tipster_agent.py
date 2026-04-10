@@ -13,5 +13,6 @@ class TipsterAgent:
         return get_general_tips(self.sport.default_subreddits)
 
     def match(self, home_team: str, away_team: str) -> List[IntelItem]:
-        """Pull pre-match discussion for a specific fixture."""
-        return get_match_intel(home_team, away_team)
+        """Pull pre-match discussion for a specific fixture, including team subreddits."""
+        team_subs = getattr(self.sport, "team_subreddits", {})
+        return get_match_intel(home_team, away_team, team_subreddits=team_subs)
