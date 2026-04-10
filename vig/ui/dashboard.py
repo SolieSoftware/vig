@@ -1,15 +1,14 @@
 import time
 from datetime import datetime, timezone
-from typing import List
+from typing import List, Optional
 
-from rich.console import Console
 from rich.columns import Columns
+from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
-from rich import box
 
-from vig.agents.odds_agent import BetOpportunity
+from vig.agents.synthesis_agent import SynthesizedBet
 from vig.sources.reddit import IntelItem
 from vig.sports.base import SportAdapter
 
@@ -28,7 +27,8 @@ CONFIDENCE_ICON = {
 }
 
 
-def _bet_card(bet: BetOpportunity) -> Panel:
+def _bet_card(sb: SynthesizedBet) -> Panel:
+    bet = sb.opportunity
     stale_warning = " [bold red][STALE][/bold red]" if bet.is_stale else ""
     conf_style = CONFIDENCE_STYLE[bet.confidence]
     conf_icon = CONFIDENCE_ICON[bet.confidence]
@@ -45,49 +45,67 @@ def _bet_card(bet: BetOpportunity) -> Panel:
     table.add_row("No-vig prob", f"{bet.no_vig_prob * 100:.1f}%")
     table.add_row(
         "Value signal",
-        Text(f"{bet.value_signal_pct * 100:+.2f}%", style="green" if bet.value_signal_pct > 0 else "red"),
+        Text(
+            f"{bet.value_signal_pct * 100:+.2f}%",
+            style="green" if bet.value_signal_pct > 0 else "red",
+        ),
     )
     table.add_row(
         "Confidence",
         Text(f"{conf_icon} {bet.confidence}", style=conf_style),
     )
-    table.add_row("Source", Text(bet.source, style="dim"))
 
+    # Community backing indicator
+    if sb.community_count > 0:
+        backing = f"👥 {sb.community_count} community pick{'s' if sb.community_count > 1 else ''}"
+        table.add_row("Community", Text(backing, style="cyan"))
+
+    table.add_row("Source", Text(bet.source, style="dim"))
     updated_str = datetime.fromtimestamp(bet.timestamp, tz=timezone.utc).strftime("%H:%M UTC")
     table.add_row("Updated", f"{updated_str}{stale_warning}")
 
+    # Community snippets below the card grid
+    if sb.community_snippets:
+        for snippet in sb.community_snippets[:2]:
+            table.add_row("", Text(f'"{snippet}"', style="dim italic"))
+
     border_style = {"HIGH": "green", "MEDIUM": "yellow", "LOW": "grey50"}[bet.confidence]
+    # Boost border if community-backed
+    if sb.community_count > 0 and bet.confidence == "LOW":
+        border_style = "cyan"
+
     return Panel(table, border_style=border_style, padding=(0, 1))
 
 
 def render(
     sport: SportAdapter,
-    bets: List[BetOpportunity],
-    intel: List[IntelItem] = None,
+    synthesized: List[SynthesizedBet],
+    general_intel: List[IntelItem] = None,
     match_intel: List[IntelItem] = None,
-    oddschecker_intel: List[IntelItem] = None,
-    top_match: str = None,
+    community_tips: List[IntelItem] = None,
+    top_match: Optional[str] = None,
 ) -> None:
     now_str = datetime.now(tz=timezone.utc).strftime("%H:%M UTC")
 
     console.print()
-    console.rule(f"[bold]vig[/bold] — {sport.display_name}  │  {now_str}  │  press [bold]r[/bold] to refresh")
+    console.rule(
+        f"[bold]vig[/bold] — {sport.display_name}  │  {now_str}  │  press [bold]r[/bold] to refresh"
+    )
     console.print()
 
-    if not bets:
+    if not synthesized:
         console.print("[dim]No opportunities found for current fixtures.[/dim]")
         return
 
-    # Show top 6 cards (or all if fewer)
-    top = bets[:6]
-    cards = [_bet_card(b) for b in top]
+    # Show top 6 cards
+    top = synthesized[:6]
+    cards = [_bet_card(s) for s in top]
 
-    # Display in 2-column grid
     for i in range(0, len(cards), 2):
-        row = cards[i:i + 2]
+        row = cards[i : i + 2]
         console.print(Columns(row, equal=True, expand=True))
 
-    # Match-specific intel pane
+    # Match-specific intel
     if match_intel:
         label = f"INTEL — {top_match}" if top_match else "INTEL — top fixture"
         console.print()
@@ -97,22 +115,27 @@ def render(
                 f"  [dim]{item.source}[/dim]  {item.text[:90]}{'…' if len(item.text) > 90 else ''}"
             )
 
-    # General intel pane
+    # General Reddit intel
     console.print()
     console.rule("[dim]INTEL — general tips (context only, not signal)[/dim]", style="dim")
-    if not intel:
+    if not general_intel:
         console.print("[dim]  No Reddit context loaded.[/dim]")
     else:
-        for item in intel[:6]:
+        for item in general_intel[:6]:
             console.print(
                 f"  [dim]{item.source}[/dim]  {item.text[:90]}{'…' if len(item.text) > 90 else ''}"
             )
 
-    # Oddschecker pane
-    if oddschecker_intel:
+    # AI-extracted community picks
+    if community_tips:
         console.print()
-        console.rule("[dim]INTEL — Community picks, AI-extracted (context only, not signal)[/dim]", style="dim")
-        for item in oddschecker_intel:
-            console.print(f"  [dim]{item.source}[/dim]  {item.text[:90]}{'…' if len(item.text) > 90 else ''}")
+        console.rule(
+            "[dim]INTEL — community picks, AI-extracted (context only, not signal)[/dim]",
+            style="dim",
+        )
+        for item in community_tips[:10]:
+            console.print(
+                f"  [dim]{item.source}[/dim]  {item.text[:90]}{'…' if len(item.text) > 90 else ''}"
+            )
 
     console.print()
