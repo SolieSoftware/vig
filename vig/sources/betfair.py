@@ -12,10 +12,11 @@ from pydantic import BaseModel
 
 from vig import config
 
-BETFAIR_LOGIN_URL = "https://identitysso.betfair.com/api/login"
+BETFAIR_LOGIN_URL = "https://identitysso-cert.betfair.com/api/certlogin"
 BETFAIR_API_BASE = "https://api.betfair.com/exchange/betting/rest/v1.0"
+BETFAIR_CERT = ("~/.vig_certs/betfair.crt", "~/.vig_certs/betfair.pem")
 
-EPL_COMPETITION_ID = "10932369"
+EPL_COMPETITION_ID = "10932509"
 FOOTBALL_EVENT_TYPE_ID = "1"
 MARKET_TYPES = ["MATCH_ODDS", "OVER_UNDER_25"]
 
@@ -48,23 +49,33 @@ class _SessionManager:
         if not config.BETFAIR_API_KEY:
             raise BetfairUnavailable("BETFAIR_API_KEY not set in .env")
 
-        resp = httpx.post(
-            BETFAIR_LOGIN_URL,
-            data={"username": config.BETFAIR_USERNAME, "password": config.BETFAIR_PASSWORD},
-            headers={
-                "X-Application": config.BETFAIR_API_KEY,
-                "Content-Type": "application/x-www-form-urlencoded",
-            },
-            timeout=10,
-        )
+        from pathlib import Path
+        cert_crt = Path("~/projects/vig/.certs/betfair.crt").expanduser()
+        cert_pem = Path("~/projects/vig/.certs/betfair.pem").expanduser()
+        if not cert_crt.exists() or not cert_pem.exists():
+            raise BetfairUnavailable("Betfair SSL cert not found at ~/projects/vig/.certs/")
+
+        with httpx.Client(cert=(str(cert_crt), str(cert_pem)), timeout=10) as client:
+            resp = client.post(
+                BETFAIR_LOGIN_URL,
+                data={"username": config.BETFAIR_USERNAME, "password": config.BETFAIR_PASSWORD},
+                headers={
+                    "X-Application": config.BETFAIR_API_KEY,
+                    "Content-Type": "application/x-www-form-urlencoded",
+                },
+            )
         if resp.status_code != 200:
-            raise BetfairUnavailable(f"Login HTTP error: {resp.status_code}")
+            raise BetfairUnavailable(f"Login HTTP error: {resp.status_code} — {resp.text[:300]}")
 
-        data = resp.json()
-        if data.get("status") != "SUCCESS":
-            raise BetfairUnavailable(f"Login failed: {data.get('error', 'unknown')}")
+        try:
+            data = resp.json()
+        except Exception:
+            raise BetfairUnavailable(f"Login returned non-JSON: {resp.text[:400]}")
 
-        return data["token"]
+        if data.get("loginStatus") != "SUCCESS":
+            raise BetfairUnavailable(f"Login failed: {data.get('loginStatus', 'unknown')}")
+
+        return data["sessionToken"]
 
     def token(self) -> str:
         # Refresh every 3 hours (tokens last ~4 hours)
