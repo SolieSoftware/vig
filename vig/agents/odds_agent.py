@@ -96,9 +96,13 @@ def _parse_h2h(event: dict, now: float) -> List[BetOpportunity]:
     home = event.get("home_team", "?")
     away = event.get("away_team", "?")
     match_name = f"{home} v {away}"
-    bets = []
 
-    for bookmaker in event.get("bookmakers", [])[:1]:  # use first bookmaker
+    # Collect all bookmakers' prices and no-vig probs
+    outcome_odds: dict = {}          # name -> [(bookmaker_title, price)]
+    no_vig_by_book: dict = {}        # bookmaker_title -> {name: no_vig_prob}
+
+    for bookmaker in event.get("bookmakers", []):
+        bk = bookmaker["title"]
         for market in bookmaker.get("markets", []):
             if market["key"] != "h2h":
                 continue
@@ -106,28 +110,42 @@ def _parse_h2h(event: dict, now: float) -> List[BetOpportunity]:
             if not outcomes:
                 continue
 
-            # Implied probs
             implied = {o["name"]: 1 / o["price"] for o in outcomes}
             total_implied = sum(implied.values())
+            no_vig_by_book[bk] = {n: v / total_implied for n, v in implied.items()}
 
-            for outcome in outcomes:
-                name = outcome["name"]
-                odds = outcome["price"]
-                imp = implied[name]
-                no_vig = imp / total_implied
-                signal = no_vig - imp
+            for o in outcomes:
+                outcome_odds.setdefault(o["name"], []).append((bk, o["price"]))
 
-                bets.append(BetOpportunity(
-                    match=match_name,
-                    market="1X2",
-                    pick=name,
-                    decimal_odds=odds,
-                    implied_prob=round(imp, 4),
-                    no_vig_prob=round(no_vig, 4),
-                    value_signal_pct=round(signal, 4),
-                    confidence=_confidence(signal),
-                    timestamp=now,
-                ))
+    if not outcome_odds or not no_vig_by_book:
+        return []
+
+    # Consensus no-vig: average across all bookmakers per outcome
+    consensus = {
+        name: sum(bk[name] for bk in no_vig_by_book.values() if name in bk)
+               / sum(1 for bk in no_vig_by_book.values() if name in bk)
+        for name in outcome_odds
+    }
+
+    # Best-value bookmaker per pick (highest odds = lowest implied prob)
+    bets = []
+    for name, offers in outcome_odds.items():
+        best_bk, best_odds = max(offers, key=lambda x: x[1])
+        imp = 1 / best_odds
+        signal = consensus[name] - imp
+
+        bets.append(BetOpportunity(
+            match=match_name,
+            market="1X2",
+            pick=name,
+            decimal_odds=best_odds,
+            implied_prob=round(imp, 4),
+            no_vig_prob=round(consensus[name], 4),
+            value_signal_pct=round(signal, 4),
+            confidence=_confidence(signal),
+            timestamp=now,
+            source=best_bk,
+        ))
 
     return bets
 
@@ -175,38 +193,53 @@ def _parse_totals(event: dict, now: float) -> List[BetOpportunity]:
     home = event.get("home_team", "?")
     away = event.get("away_team", "?")
     match_name = f"{home} v {away}"
-    bets = []
 
-    for bookmaker in event.get("bookmakers", [])[:1]:
+    outcome_odds: dict = {}
+    no_vig_by_book: dict = {}
+
+    for bookmaker in event.get("bookmakers", []):
+        bk = bookmaker["title"]
         for market in bookmaker.get("markets", []):
             if market["key"] != "totals":
                 continue
-            # Only O/U 2.5
             outcomes = [o for o in market.get("outcomes", []) if o.get("point") == 2.5]
             if not outcomes:
                 continue
 
             implied = {o["name"]: 1 / o["price"] for o in outcomes}
             total_implied = sum(implied.values())
+            no_vig_by_book[bk] = {n: v / total_implied for n, v in implied.items()}
 
-            for outcome in outcomes:
-                name = outcome["name"]
-                odds = outcome["price"]
-                imp = implied[name]
-                no_vig = imp / total_implied
-                signal = no_vig - imp
+            for o in outcomes:
+                outcome_odds.setdefault(o["name"], []).append((bk, o["price"]))
 
-                bets.append(BetOpportunity(
-                    match=match_name,
-                    market="O/U 2.5",
-                    pick=name,
-                    decimal_odds=odds,
-                    implied_prob=round(imp, 4),
-                    no_vig_prob=round(no_vig, 4),
-                    value_signal_pct=round(signal, 4),
-                    confidence=_confidence(signal),
-                    timestamp=now,
-                ))
+    if not outcome_odds or not no_vig_by_book:
+        return []
+
+    consensus = {
+        name: sum(bk[name] for bk in no_vig_by_book.values() if name in bk)
+               / sum(1 for bk in no_vig_by_book.values() if name in bk)
+        for name in outcome_odds
+    }
+
+    bets = []
+    for name, offers in outcome_odds.items():
+        best_bk, best_odds = max(offers, key=lambda x: x[1])
+        imp = 1 / best_odds
+        signal = consensus[name] - imp
+
+        bets.append(BetOpportunity(
+            match=match_name,
+            market="O/U 2.5",
+            pick=name,
+            decimal_odds=best_odds,
+            implied_prob=round(imp, 4),
+            no_vig_prob=round(consensus[name], 4),
+            value_signal_pct=round(signal, 4),
+            confidence=_confidence(signal),
+            timestamp=now,
+            source=best_bk,
+        ))
 
     return bets
 
