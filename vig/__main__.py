@@ -4,10 +4,12 @@ import tty
 
 from rich.console import Console
 
+from vig.agents.betfair_agent import get_betfair_opportunities
 from vig.agents.odds_agent import OddsAPIUnavailable, get_opportunities
 from vig.agents.scraper_agent import OddscheckerUnavailable, get_oddschecker_tips
 from vig.agents.synthesis_agent import synthesize
 from vig.agents.tipster_agent import TipsterAgent
+from vig.sources.betfair import BetfairUnavailable
 from vig.sports.football import FootballAdapter
 from vig.ui.dashboard import render
 
@@ -34,6 +36,15 @@ def _run() -> None:
     except OddsAPIUnavailable as e:
         console.print(f"[bold red]Odds API unavailable:[/bold red] {e}")
         return
+
+    # Merge in Betfair exchange prices
+    try:
+        betfair_bets = get_betfair_opportunities()
+        if betfair_bets:
+            console.print(f"[dim]Betfair: {len(betfair_bets)} exchange prices loaded[/dim]")
+        bets = sorted(bets + betfair_bets, key=lambda b: b.value_signal_pct, reverse=True)
+    except BetfairUnavailable as e:
+        console.print(f"[dim]Betfair unavailable: {e}[/dim]")
 
     general_intel = tipster.general()
 

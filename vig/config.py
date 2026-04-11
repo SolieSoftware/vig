@@ -10,6 +10,11 @@ REDDIT_CLIENT_ID = os.environ.get("REDDIT_CLIENT_ID", "")
 REDDIT_CLIENT_SECRET = os.environ.get("REDDIT_CLIENT_SECRET", "")
 REDDIT_USER_AGENT = os.environ.get("REDDIT_USER_AGENT", "vig/0.1")
 
+# Betfair
+BETFAIR_API_KEY = os.environ.get("BETFAIR_API_KEY", "")
+BETFAIR_USERNAME = os.environ.get("BETFAIR_USERNAME", "")
+BETFAIR_PASSWORD = os.environ.get("BETFAIR_PASSWORD", "")
+
 # Odds API
 ODDS_API_BASE = "https://api.the-odds-api.com/v4"
 ODDS_API_REGIONS = "eu"
