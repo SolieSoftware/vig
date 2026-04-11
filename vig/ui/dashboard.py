@@ -9,6 +9,7 @@ from rich.table import Table
 from rich.text import Text
 
 from vig.agents.synthesis_agent import SynthesizedBet
+from vig.sources.polymarket import PolyMarket
 from vig.sources.reddit import IntelItem
 from vig.sports.base import SportAdapter
 
@@ -77,6 +78,41 @@ def _bet_card(sb: SynthesizedBet) -> Panel:
     return Panel(table, border_style=border_style, padding=(0, 1))
 
 
+def _polymarket_pane(markets: List[PolyMarket]) -> None:
+    console.print()
+    console.rule("[bold cyan]POLYMARKET[/bold cyan] — Prediction Markets (crowd probability)", style="cyan")
+    console.print()
+
+    table = Table.grid(padding=(0, 2))
+    table.add_column(style="dim", width=12)    # category
+    table.add_column(width=52)                 # title
+    table.add_column(width=20)                 # top outcome
+    table.add_column(width=6, justify="right") # probability
+    table.add_column(style="dim", width=8, justify="right")  # volume
+
+    for m in markets:
+        prob = m.top_prob
+        if prob >= 0.7:
+            prob_style = "bold green"
+        elif prob <= 0.3:
+            prob_style = "bold red"
+        else:
+            prob_style = "yellow"
+
+        vol_str = f"${m.volume_usd/1e6:.1f}M" if m.volume_usd >= 1e6 else f"${m.volume_usd/1e3:.0f}k"
+
+        table.add_row(
+            f"[dim]{m.category}[/dim]",
+            Text(m.title[:52], overflow="ellipsis"),
+            Text(m.top_outcome[:20], style="dim"),
+            Text(f"{prob*100:.0f}%", style=prob_style),
+            vol_str,
+        )
+
+    console.print(table)
+    console.print()
+
+
 def render(
     sport: SportAdapter,
     synthesized: List[SynthesizedBet],
@@ -84,6 +120,7 @@ def render(
     match_intel: List[IntelItem] = None,
     community_tips: List[IntelItem] = None,
     top_match: Optional[str] = None,
+    poly_markets: List[PolyMarket] = None,
 ) -> None:
     now_str = datetime.now(tz=timezone.utc).strftime("%H:%M UTC")
 
@@ -137,5 +174,9 @@ def render(
             console.print(
                 f"  [dim]{item.source}[/dim]  {item.text[:90]}{'…' if len(item.text) > 90 else ''}"
             )
+
+    # Polymarket prediction markets pane
+    if poly_markets:
+        _polymarket_pane(poly_markets)
 
     console.print()

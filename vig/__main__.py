@@ -10,6 +10,7 @@ from vig.agents.scraper_agent import OddscheckerUnavailable, get_oddschecker_tip
 from vig.agents.synthesis_agent import synthesize
 from vig.agents.tipster_agent import TipsterAgent
 from vig.sources.betfair import BetfairUnavailable
+from vig.sources.polymarket import PolymarketUnavailable, get_top_markets
 from vig.sports.football import FootballAdapter
 from vig.ui.dashboard import render
 
@@ -62,6 +63,12 @@ def _run() -> None:
 
     synthesized = synthesize(bets, community_tips)
 
+    poly_markets = []
+    try:
+        poly_markets = get_top_markets(limit=12)
+    except PolymarketUnavailable as e:
+        console.print(f"[dim]Polymarket unavailable: {e}[/dim]")
+
     render(
         sport=sport,
         synthesized=synthesized,
@@ -69,6 +76,7 @@ def _run() -> None:
         match_intel=match_intel,
         community_tips=community_tips,
         top_match=bets[0].match if bets else None,
+        poly_markets=poly_markets,
     )
 
 
