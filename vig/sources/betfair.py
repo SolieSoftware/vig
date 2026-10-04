@@ -1,10 +1,11 @@
 """
 Betfair Exchange API client.
 
-Uses interactive (username/password) login — no SSL certificate required.
+Uses non-interactive (certificate) login — requires betfair.crt/betfair.pem in .certs/.
 Fetches EPL MATCH_ODDS and OVER_UNDER_25 markets with best available back prices.
 """
 import time
+from pathlib import Path
 from typing import List, Optional
 
 import httpx
@@ -14,7 +15,7 @@ from vig import config
 
 BETFAIR_LOGIN_URL = "https://identitysso-cert.betfair.com/api/certlogin"
 BETFAIR_API_BASE = "https://api.betfair.com/exchange/betting/rest/v1.0"
-BETFAIR_CERT = ("~/.vig_certs/betfair.crt", "~/.vig_certs/betfair.pem")
+CERT_DIR = Path(__file__).parent.parent.parent / ".certs"
 
 EPL_COMPETITION_ID = "10932509"
 FOOTBALL_EVENT_TYPE_ID = "1"
@@ -49,11 +50,10 @@ class _SessionManager:
         if not config.BETFAIR_API_KEY:
             raise BetfairUnavailable("BETFAIR_API_KEY not set in .env")
 
-        from pathlib import Path
-        cert_crt = Path("~/projects/vig/.certs/betfair.crt").expanduser()
-        cert_pem = Path("~/projects/vig/.certs/betfair.pem").expanduser()
+        cert_crt = CERT_DIR / "betfair.crt"
+        cert_pem = CERT_DIR / "betfair.pem"
         if not cert_crt.exists() or not cert_pem.exists():
-            raise BetfairUnavailable("Betfair SSL cert not found at ~/projects/vig/.certs/")
+            raise BetfairUnavailable(f"Betfair SSL cert not found at {CERT_DIR}")
 
         with httpx.Client(cert=(str(cert_crt), str(cert_pem)), timeout=10) as client:
             resp = client.post(

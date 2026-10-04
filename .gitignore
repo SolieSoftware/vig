@@ -2,3 +2,9 @@
 .vig_cache/
 .gstack/
 .certs/
+.venv/
+__pycache__/
+*.pyc
+.playwright-mcp/
+.claude-flow/
+.claude/settings.local.json
